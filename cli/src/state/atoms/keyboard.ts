@@ -887,9 +887,9 @@ function handleTextInputKeys(get: Getter, set: Setter, key: Key) {
 	return
 }
 
-function handleGlobalHotkeys(get: Getter, set: Setter, key: Key): boolean {
+function handleGlobalHotkeys(get: Getter, set: Setter, key: Key): boolean | Promise<boolean> {
 	// Debug logging for key detection
-	if (key.ctrl || key.sequence === "\x16") {
+	if (key.ctrl || key.meta || key.sequence === "\x16") {
 		logs.debug(
 			`Key detected: name=${key.name}, ctrl=${key.ctrl}, meta=${key.meta}, sequence=${JSON.stringify(key.sequence)}`,
 			"clipboard",
@@ -900,10 +900,8 @@ function handleGlobalHotkeys(get: Getter, set: Setter, key: Key): boolean {
 	// This is how Ctrl+V appears in most terminals
 	if (key.sequence === "\x16") {
 		logs.debug("Detected Ctrl+V via sequence \\x16", "clipboard")
-		handleClipboardImagePaste(get, set).catch((err) =>
-			logs.error("Unhandled clipboard paste error", "clipboard", { error: err }),
-		)
-		return true
+		// Check for image and handle it - only consume the key if we actually paste an image
+		return handleClipboardImagePasteIfAvailable(get, set)
 	}
 
 	switch (key.name) {
@@ -915,14 +913,13 @@ function handleGlobalHotkeys(get: Getter, set: Setter, key: Key): boolean {
 			}
 			break
 		case "v":
-			// Ctrl+V - check for clipboard image
-			if (key.ctrl) {
-				logs.debug("Detected Ctrl+V via key.name", "clipboard")
-				// Handle clipboard image paste asynchronously
-				handleClipboardImagePaste(get, set).catch((err) =>
-					logs.error("Unhandled clipboard paste error", "clipboard", { error: err }),
-				)
-				return true
+			// Ctrl+V (Linux/Windows) or Cmd+V (macOS) - check for clipboard image
+			// On macOS, Cmd+V sends key.meta = true
+			// On Linux/Windows, Ctrl+V sends key.ctrl = true
+			if (key.ctrl || key.meta) {
+				logs.debug(`Detected ${key.meta ? "Cmd" : "Ctrl"}+V via key.name`, "clipboard")
+				// Check for image and handle it - only consume the key if we actually paste an image
+				return handleClipboardImagePasteIfAvailable(get, set)
 			}
 			break
 		case "x":
@@ -977,23 +974,25 @@ function handleGlobalHotkeys(get: Getter, set: Setter, key: Key): boolean {
 }
 
 /**
- * Handle clipboard image paste (Ctrl+V)
- * Saves clipboard image to a temp file and inserts @path reference into text buffer
+ * Check if clipboard has an image and paste it if available
+ * Returns true if an image was pasted (key should be consumed), false otherwise
  */
-async function handleClipboardImagePaste(get: Getter, set: Setter): Promise<void> {
-	logs.debug("handleClipboardImagePaste called", "clipboard")
+async function handleClipboardImagePasteIfAvailable(get: Getter, set: Setter): Promise<boolean> {
+	logs.debug("handleClipboardImagePasteIfAvailable called", "clipboard")
 	try {
-		// Check if clipboard has an image
+		// Check if clipboard has an image first
 		logs.debug("Checking clipboard for image...", "clipboard")
 		const hasImage = await clipboardHasImage()
 		logs.debug(`clipboardHasImage returned: ${hasImage}`, "clipboard")
+
 		if (!hasImage) {
-			setClipboardStatusWithTimeout(set, "No image in clipboard", 2000)
-			logs.debug("No image in clipboard", "clipboard")
-			return
+			// No image in clipboard - don't consume the key
+			// Let the terminal's bracketed paste mode handle text paste
+			logs.debug("No image in clipboard, not consuming key", "clipboard")
+			return false
 		}
 
-		// Save the image to a file in temp directory
+		// There's an image - save and paste it
 		const result = await saveClipboardImage()
 		if (result.success && result.filePath) {
 			// Add image to references and get its number
@@ -1023,8 +1022,11 @@ async function handleClipboardImagePaste(get: Getter, set: Setter): Promise<void
 					error: cleanupError instanceof Error ? cleanupError.message : String(cleanupError),
 				})
 			})
+
+			return true // Image pasted, consume the key
 		} else {
 			setClipboardStatusWithTimeout(set, result.error || "Failed to save clipboard image", 3000)
+			return true // Still consume the key since we tried to handle it
 		}
 	} catch (error) {
 		setClipboardStatusWithTimeout(
@@ -1032,6 +1034,7 @@ async function handleClipboardImagePaste(get: Getter, set: Setter): Promise<void
 			`Clipboard error: ${error instanceof Error ? error.message : String(error)}`,
 			3000,
 		)
+		return true // Consume the key on error
 	}
 }
 
@@ -1041,7 +1044,10 @@ async function handleClipboardImagePaste(get: Getter, set: Setter): Promise<void
  */
 export const keyboardHandlerAtom = atom(null, async (get, set, key: Key) => {
 	// Priority 1: Handle global hotkeys first (these work in all modes)
-	if (handleGlobalHotkeys(get, set, key)) {
+	// handleGlobalHotkeys may return a Promise for async clipboard operations
+	const hotkeyResult = handleGlobalHotkeys(get, set, key)
+	const hotkeyHandled = hotkeyResult instanceof Promise ? await hotkeyResult : hotkeyResult
+	if (hotkeyHandled) {
 		return
 	}
 

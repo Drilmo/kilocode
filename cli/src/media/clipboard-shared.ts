@@ -86,7 +86,12 @@ export function buildDataUrl(data: Buffer, format: string): string {
 }
 
 export function getUnsupportedClipboardPlatformMessage(): string {
-	return `Clipboard image paste is only supported on macOS.
+	return `Clipboard image paste is not supported on this platform (${process.platform}).
+
+Supported platforms:
+  - macOS (using osascript)
+  - Linux (requires xclip or wl-clipboard for Wayland)
+  - Windows (using PowerShell)
 
 Alternative:
   - Use @path/to/image.png to attach images`
