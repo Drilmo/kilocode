@@ -336,7 +336,7 @@ export class CLI {
 			// This reduces flickering for frequently updating UIs.
 			incrementalRendering: true,
 			exitOnCtrlC: false,
-			...(shouldDisableStdin ? { stdout: process.stdout, stderr: process.stderr } : {}),
+			...(shouldDisableStdin ? { stdin: undefined, stdout: process.stdout, stderr: process.stderr } : {}),
 		}
 
 		this.ui = render(
