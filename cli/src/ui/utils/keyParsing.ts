@@ -307,14 +307,47 @@ export function parseKittySequence(buffer: string): ParseResult {
 
 /**
  * Check if a sequence is a paste mode boundary
+ * Uses startsWith instead of exact match to handle cases where
+ * terminals send the paste prefix/suffix with text in the same chunk
+ * (common in VS Code's integrated terminal on macOS)
  */
 export function isPasteModeBoundary(sequence: string): {
 	isStart: boolean
 	isEnd: boolean
+	remainingText: string
 } {
+	// Check if sequence starts with paste prefix
+	if (sequence.startsWith(PASTE_MODE_PREFIX)) {
+		return {
+			isStart: true,
+			isEnd: false,
+			remainingText: sequence.slice(PASTE_MODE_PREFIX.length),
+		}
+	}
+
+	// Check if sequence ends with or is exactly the paste suffix
+	// The suffix might come with text before it in the same chunk
+	if (sequence.endsWith(PASTE_MODE_SUFFIX)) {
+		return {
+			isStart: false,
+			isEnd: true,
+			remainingText: sequence.slice(0, -PASTE_MODE_SUFFIX.length),
+		}
+	}
+
+	// Also check for exact suffix match (backward compatibility)
+	if (sequence === PASTE_MODE_SUFFIX) {
+		return {
+			isStart: false,
+			isEnd: true,
+			remainingText: "",
+		}
+	}
+
 	return {
-		isStart: sequence === PASTE_MODE_PREFIX,
-		isEnd: sequence === PASTE_MODE_SUFFIX,
+		isStart: false,
+		isEnd: false,
+		remainingText: "",
 	}
 }
 

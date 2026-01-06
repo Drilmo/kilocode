@@ -179,14 +179,25 @@ export function KeyboardProvider({ children, config = {} }: KeyboardProviderProp
 			}
 
 			// Check for paste mode boundaries
+			// isPasteModeBoundary now handles cases where terminals (like VS Code)
+			// send the paste prefix/suffix with text in the same chunk
 			const paste = isPasteModeBoundary(parsedKey.sequence)
 			if (paste.isStart) {
 				isPasteRef.current = true
-				pasteBufferRef.current = ""
+				// Include any remaining text that came with the paste prefix
+				pasteBufferRef.current = paste.remainingText
 				setPasteMode(true)
+				if (paste.remainingText) {
+					appendToPasteBuffer(paste.remainingText)
+				}
 				return
 			}
 			if (paste.isEnd) {
+				// Include any remaining text that came before the paste suffix
+				if (paste.remainingText) {
+					pasteBufferRef.current += paste.remainingText
+					appendToPasteBuffer(paste.remainingText)
+				}
 				completePaste()
 				return
 			}
