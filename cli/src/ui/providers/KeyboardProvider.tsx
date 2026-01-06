@@ -146,10 +146,18 @@ export function KeyboardProvider({ children, config = {} }: KeyboardProviderProp
 		// Determine if we need a passthrough stream (for older Node versions or paste workaround)
 		const nodeVersionParts = process.versions.node.split(".")
 		const nodeMajorVersion = nodeVersionParts[0] ? parseInt(nodeVersionParts[0], 10) : 20
+
+		// VS Code's integrated terminal sometimes sends paste data in a way that
+		// Node's readline doesn't handle correctly with escapeCodeTimeout=0.
+		// The passthrough mode intercepts raw data BEFORE readline and handles
+		// paste markers manually with indexOf(), which is more robust.
+		const isVSCodeTerminal = process.env["TERM_PROGRAM"] === "vscode"
+
 		const usePassthrough =
 			nodeMajorVersion < 20 ||
 			process.env["PASTE_WORKAROUND"] === "1" ||
-			process.env["PASTE_WORKAROUND"] === "true"
+			process.env["PASTE_WORKAROUND"] === "true" ||
+			isVSCodeTerminal
 
 		// Setup streams
 		const keypressStream = usePassthrough ? new PassThrough() : stdin
