@@ -151,7 +151,14 @@ export function KeyboardProvider({ children, config = {} }: KeyboardProviderProp
 		// Node's readline doesn't handle correctly with escapeCodeTimeout=0.
 		// The passthrough mode intercepts raw data BEFORE readline and handles
 		// paste markers manually with indexOf(), which is more robust.
-		const isVSCodeTerminal = process.env["TERM_PROGRAM"] === "vscode"
+		// We check multiple VS Code-specific environment variables for reliable detection.
+		const isVSCodeTerminal =
+			process.env["TERM_PROGRAM"] === "vscode" ||
+			process.env["VSCODE_INJECTION"] !== undefined ||
+			process.env["VSCODE_GIT_ASKPASS_NODE"] !== undefined ||
+			process.env["VSCODE_GIT_IPC_HANDLE"] !== undefined ||
+			process.env["VSCODE_IPC_HOOK"] !== undefined ||
+			process.env["VSCODE_IPC_HOOK_CLI"] !== undefined
 
 		const usePassthrough =
 			nodeMajorVersion < 20 ||
@@ -378,7 +385,9 @@ export function KeyboardProvider({ children, config = {} }: KeyboardProviderProp
 						appendToPasteBuffer(chunk)
 					} else {
 						// Not in paste mode - write remaining data to stream
-						keypressStream.write(data.slice(pos))
+						// Use Buffer.from() to properly handle UTF-8 multi-byte characters
+						// (pos is a string index, not a byte offset)
+						keypressStream.write(Buffer.from(dataStr.slice(pos)))
 					}
 					break
 				}
@@ -392,7 +401,9 @@ export function KeyboardProvider({ children, config = {} }: KeyboardProviderProp
 						appendToPasteBuffer(chunk)
 					} else {
 						// Not in paste mode - write data to stream
-						keypressStream.write(data.slice(pos, nextMarkerPos))
+						// Use Buffer.from() to properly handle UTF-8 multi-byte characters
+						// (pos and nextMarkerPos are string indices, not byte offsets)
+						keypressStream.write(Buffer.from(dataStr.slice(pos, nextMarkerPos)))
 					}
 				}
 
