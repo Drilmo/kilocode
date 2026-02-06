@@ -1023,6 +1023,7 @@ export interface WebviewMessage {
 	source?: "global" | "project"
 	requestId?: string
 	ids?: string[]
+	excludeFavorites?: boolean // kilocode_change: For batch delete to exclude favorited tasks
 	hasSystemPromptOverride?: boolean
 	terminalOperation?: "continue" | "abort"
 	messageTs?: number
@@ -1154,6 +1155,7 @@ export interface TaskHistoryResponsePayload {
 	historyItems: HistoryItem[]
 	pageIndex: number
 	pageCount: number
+	totalItems: number
 }
 // kilocode_change end
 
